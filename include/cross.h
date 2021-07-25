@@ -86,8 +86,13 @@ public:
 
 typedef struct dir_struct {
 	HANDLE          handle;
-	char            base_path[MAX_PATH+4];
+	char            base_path[(MAX_PATH+4)*sizeof(wchar_t)];
+    wchar_t *wbase_path(void) {
+        return (wchar_t*)base_path;
+    }
 	WIN32_FIND_DATA search_data;
+	WIN32_FIND_DATAW search_dataw;
+    bool            wide;
 } dir_information;
 
 #else

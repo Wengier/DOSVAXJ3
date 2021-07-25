@@ -22,6 +22,7 @@
 #include "dosbox.h"
 #include "cross.h"
 #include "support.h"
+#include "dos_inc.h"
 #include <string>
 #include <stdlib.h>
 
@@ -139,6 +140,25 @@ bool Cross::IsPathAbsolute(std::string const& in) {
 
 #if defined (WIN32)
 
+dir_information* open_directoryw(const wchar_t* dirname) {
+	if (dirname == NULL) return NULL;
+
+	size_t len = wcslen(dirname);
+	if (len == 0) return NULL;
+
+	static dir_information dir;
+
+	wcsncpy(dir.wbase_path(),dirname,MAX_PATH);
+
+	if (dirname[len-1] == '\\') wcscat(dir.wbase_path(),L"*.*");
+	else                        wcscat(dir.wbase_path(),L"\\*.*");
+
+    dir.wide = true;
+	dir.handle = INVALID_HANDLE_VALUE;
+
+	return (_waccess(dirname,0) ? NULL : &dir);
+}
+
 dir_information* open_directory(const char* dirname) {
 	if (dirname == NULL) return NULL;
 
@@ -155,6 +175,78 @@ dir_information* open_directory(const char* dirname) {
 	dir.handle = INVALID_HANDLE_VALUE;
 
 	return (access(dirname,0) ? NULL : &dir);
+}
+
+char *CodePageHostToGuest(const wchar_t *s);
+static bool is_filename_8by3w(const wchar_t* fname) {
+	if (CodePageHostToGuest(fname)==NULL) return false;
+    int i;
+
+    /* Is the first part 8 chars or less? */
+    i=0;
+    while (*fname != 0 && *fname != L'.') {
+		if (*fname<=32||*fname==127||*fname==L'"'||*fname==L'+'||*fname==L'='||*fname==L','||*fname==L';'||*fname==L':'||*fname==L'<'||*fname==L'>'||*fname==L'|'||*fname==L'?'||*fname==L'*') return false;
+		if (dos.loaded_codepage == 932 && (*fname & 0xFF00u) != 0u && (*fname & 0xFCu) != 0x08u) i++;
+		fname++; i++; 
+	}
+    if (i > 8) return false;
+
+    if (*fname == L'.') fname++;
+
+    /* Is the second part 3 chars or less? A second '.' also makes it a LFN */
+    i=0;
+    while (*fname != 0 && *fname != L'.') {
+		if (*fname<=32||*fname==127||*fname==L'"'||*fname==L'+'||*fname==L'='||*fname==L','||*fname==L';'||*fname==L':'||*fname==L'<'||*fname==L'>'||*fname==L'|'||*fname==L'?'||*fname==L'*') return false;
+		if (dos.loaded_codepage == 932 && (*fname & 0xFF00u) != 0u && (*fname & 0xFCu) != 0x08u) i++;
+		fname++; i++;
+	}
+    if (i > 3) return false;
+
+    /* if there is anything beyond this point, it's an LFN */
+    if (*fname != 0) return false;
+
+    return true;
+}
+
+bool read_directory_firstw(dir_information* dirp, wchar_t* entry_name, wchar_t* entry_sname, bool& is_directory) {
+    if (!dirp->wide) return false;
+
+	do {
+		dirp->handle = FindFirstFileW(dirp->wbase_path(), &dirp->search_dataw);
+		if (INVALID_HANDLE_VALUE == dirp->handle) return false;
+	} while (CodePageHostToGuest(dirp->search_dataw.cFileName)==NULL);
+
+	wcsncpy(entry_name,dirp->search_dataw.cFileName,(MAX_PATH<CROSS_LEN)?MAX_PATH:CROSS_LEN);
+	if (dirp->search_dataw.cAlternateFileName[0] != 0 && is_filename_8by3w(dirp->search_dataw.cFileName))
+		wcsncpy(entry_sname,dirp->search_dataw.cFileName,13);
+	else
+		wcsncpy(entry_sname,dirp->search_dataw.cAlternateFileName,13);
+
+	if (dirp->search_dataw.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) is_directory = true;
+	else is_directory = false;
+
+	return true;
+}
+
+bool read_directory_nextw(dir_information* dirp, wchar_t* entry_name, wchar_t* entry_sname, bool& is_directory) {
+    if (!dirp->wide) return false;
+
+	int result;
+	do {
+		result = FindNextFileW(dirp->handle, &dirp->search_dataw);
+		if (result==0) return false;
+	} while (CodePageHostToGuest(dirp->search_dataw.cFileName)==NULL);
+
+	wcsncpy(entry_name,dirp->search_dataw.cFileName,(MAX_PATH<CROSS_LEN)?MAX_PATH:CROSS_LEN);
+	if (dirp->search_dataw.cAlternateFileName[0] != 0 && is_filename_8by3w(dirp->search_dataw.cFileName))
+		wcsncpy(entry_sname,dirp->search_dataw.cFileName,13);
+	else
+		wcsncpy(entry_sname,dirp->search_dataw.cAlternateFileName,13);
+
+	if (dirp->search_dataw.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) is_directory = true;
+	else is_directory = false;
+
+	return true;
 }
 
 bool read_directory_first(dir_information* dirp, char* entry_name, char* entry_sname, bool& is_directory) {

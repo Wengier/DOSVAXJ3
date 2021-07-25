@@ -124,18 +124,19 @@ private:
 /* The following variable can be lowered to free up some memory.
  * The negative side effect: The stored searches will be turned over faster.
  * Should not have impact on systems with few directory entries. */
+class DOS_Drive;
 #define MAX_OPENDIRS 2048
 //Can be high as it's only storage (16 bit variable)
 
 class DOS_Drive_Cache {
 public:
 	DOS_Drive_Cache					(void);
-	DOS_Drive_Cache					(const char* path);
+	DOS_Drive_Cache					(const char* path, DOS_Drive *drive);
 	~DOS_Drive_Cache				(void);
 
 	enum TDirSort { NOSORT, ALPHABETICAL, DIRALPHABETICAL, ALPHABETICALREV, DIRALPHABETICALREV };
 
-	void		SetBaseDir			(const char* path);
+	void		SetBaseDir			(const char* path, DOS_Drive *drive);
 	void		SetDirSort			(TDirSort sort) { sortDirType = sort; };
 	bool		OpenDir				(const char* path, Bit16u& id);
 	bool		ReadDir				(Bit16u id, char* &result, char * &lresult);
@@ -200,6 +201,7 @@ private:
 
 	CFileInfo*	dirBase;
 	char		dirPath				[CROSS_LEN];
+	DOS_Drive*	drive = NULL;
 	char		basePath			[CROSS_LEN];
 	bool		dirFirstTime;
 	TDirSort	sortDirType;
@@ -244,6 +246,10 @@ public:
 	virtual bool isRemovable(void)=0;
 	virtual bool isWriteProtected(void) = 0;
 	virtual Bits UnMount(void)=0;
+
+	virtual void *opendir(const char *dir) { (void)dir; return NULL; };
+    virtual bool read_directory_first(void *handle, char* entry_name, char* entry_sname, bool& is_directory) { (void)handle; (void)entry_name; (void)entry_sname; (void)is_directory; return false; };
+    virtual bool read_directory_next(void *handle, char* entry_name, char* entry_sname, bool& is_directory) { (void)handle; (void)entry_name; (void)entry_sname; (void)is_directory; return false; };
 
 	char * GetInfo(void);
 	char curdir[DOS_PATHLENGTH];
