@@ -43,6 +43,9 @@
 
 int fileInfoCounter = 0;
 
+bool isKanji1(Bit8u chr) { return (chr >= 0x81 && chr <= 0x9f) || (chr >= 0xe0 && chr <= 0xfc); }
+bool isKanji2(Bit8u chr) { return (chr >= 0x40 && chr <= 0x7e) || (chr >= 0x80 && chr <= 0xfc); }
+
 bool SortByName(DOS_Drive_Cache::CFileInfo* const &a, DOS_Drive_Cache::CFileInfo* const &b) {
 	return strcmp(a->shortname,b->shortname)<0;
 }
@@ -737,7 +740,11 @@ bool DOS_Drive_Cache::OpenDir(CFileInfo* dir, const char* expand, Bit16u& id) {
     // open dir
     if (dirSearch[id]) {
         // open dir
-        void* dirp = drive->opendir(expandcopy);
+        void* dirp =
+#ifdef WIN32
+        dos.loaded_codepage==932?drive->opendir(expandcopy):
+#endif
+        open_directory(expandcopy);
         if (dirp) { 
             // Reset it..
             if (dirp) close_directory((dir_information*)dirp);
@@ -805,7 +812,11 @@ bool DOS_Drive_Cache::ReadDir(Bit16u id, char* &result, char * &lresult) {
 
 	if (!IsCachedIn(dirSearch[id])) {
 		// Try to open directory
-		void* dirp = drive->opendir(dirPath);
+		dir_information* dirp = (dir_information*)(
+#ifdef WIN32
+        dos.loaded_codepage==932?drive->opendir(dirPath):
+#endif
+        open_directory(dirPath));
 		if (!dirp) {
 			if (dirSearch[id]) {
 				dirSearch[id]->id = MAX_OPENDIRS;
@@ -816,9 +827,17 @@ bool DOS_Drive_Cache::ReadDir(Bit16u id, char* &result, char * &lresult) {
 		// Read complete directory
 		char dir_name[CROSS_LEN], dir_sname[DOS_NAMELENGTH+1];
 		bool is_directory;
-		if (drive->read_directory_first(dirp, dir_name, dir_sname, is_directory)) {
+		if (
+#ifdef WIN32
+        dos.loaded_codepage==932?drive->read_directory_first(dirp, dir_name, dir_sname, is_directory):
+#endif
+        read_directory_first(dirp, dir_name, dir_sname, is_directory)) {
 			CreateEntry(dirSearch[id], dir_name, dir_sname, is_directory);
-			while (drive->read_directory_next(dirp, dir_name, dir_sname, is_directory)) {
+			while (
+#ifdef WIN32
+            dos.loaded_codepage==932?drive->read_directory_next(dirp, dir_name, dir_sname, is_directory):
+#endif
+            read_directory_next(dirp, dir_name, dir_sname, is_directory)) {
 				CreateEntry(dirSearch[id], dir_name, dir_sname, is_directory);
 			}
 		}
